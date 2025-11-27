@@ -32,10 +32,12 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # authenticate gh using token from stdin
           echo "${GITHUB_TOKEN}" | gh auth login --with-token
 
       - name: Create release and upload asset using gh
         env:
+          ZIP_NAME: ${{ steps.make_zip.outputs.zip_name }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
@@ -44,7 +46,10 @@ jobs:
           NOTES="Automated release created by GitHub Actions.
 Run ID: ${{ github.run_id }}
 Commit: ${{ github.sha }}"
-          # Create the release and upload the zip; if the release already exists, upload will clobber
-          if ! gh release create "${TAG}" "${{ steps.make_zip.outputs.zip_name }}" --title "${TITLE}" --notes "${NOTES}"; then
-            gh release upload "${TAG}" "${{ steps.make_zip.outputs.zip_name }}" --clobber
+          # Try to create release and upload asset; if release exists, upload will clobber the asset
+          if gh release create "$TAG" "$ZIP_NAME" --title "$TITLE" --notes "$NOTES"; then
+            echo "Release created and asset uploaded."
+          else
+            echo "Release may already exist — uploading asset (clobber) to ${TAG}..."
+            gh release upload "$TAG" "$ZIP_NAME" --clobber
           fi
