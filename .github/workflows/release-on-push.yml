@@ -1,0 +1,49 @@
+name: Create release on push (zip)
+on: push
+permissions:
+  contents: write
+
+jobs:
+  create_release:
+    name: Create release (zip) on push
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - id: make_zip
+        name: Create zip of repository
+        run: |
+          set -euo pipefail
+          ZIP_NAME="repo-release-${{ github.run_id }}.zip"
+          # Exclude .git and workflow files so we don't leak CI metadata
+          zip -r "$ZIP_NAME" . -x ".git/*" ".github/workflows/*"
+          echo "zip_name=$ZIP_NAME" >> "$GITHUB_OUTPUT"
+
+      - id: create_release
+        name: Create GitHub Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: "release-${{ github.run_id }}"
+          release_name: "Automated release ${{ github.run_id }} (branch: ${{ github.ref_name }})"
+          body: |
+            Automated release created by GitHub Actions.
+            Run ID: ${{ github.run_id }}
+            Commit: ${{ github.sha }}
+          draft: false
+          prerelease: false
+
+      - name: Upload zip to release
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ${{ steps.make_zip.outputs.zip_name }}
+          asset_name: "${{ github.repository }}-release-${{ github.run_id }}.zip"
+          asset_content_type: application/zip
