@@ -43,10 +43,7 @@ jobs:
           set -euo pipefail
           TAG="release-${{ github.run_id }}"
           TITLE="Automated release ${{ github.run_id }} (branch: ${{ github.ref_name }})"
-          NOTES="Automated release created by GitHub Actions.
-Run ID: ${{ github.run_id }}
-Commit: ${{ github.sha }}"
-          # Try to create release and upload asset; if release exists, upload will clobber the asset
+          NOTES="Automated release created by GitHub Actions. Run ID: ${{ github.run_id }} Commit: ${{ github.sha }}"
           if gh release create "$TAG" "$ZIP_NAME" --title "$TITLE" --notes "$NOTES"; then
             echo "Release created and asset uploaded."
           else
