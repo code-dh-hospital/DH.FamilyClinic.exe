@@ -1,49 +1,43 @@
-name: Create release on push (zip)
-on: push
-permissions:
-  contents: write
+steps:
+  - name: Checkout repository
+    uses: actions/checkout@v4
+    with:
+      fetch-depth: 0
 
-jobs:
-  create_release:
-    name: Create release (zip) on push
-    runs-on: ubuntu-latest
+  - id: make_zip
+    name: Create zip of repository
+    run: |
+      set -euo pipefail
+      ZIP_NAME="repo-release-${{ github.run_id }}.zip"
+      # Exclude .git and workflow files so we don't leak CI metadata
+      zip -r "$ZIP_NAME" . -x ".git/*" ".github/workflows/*"
+      echo "zip_name=$ZIP_NAME" >> "$GITHUB_OUTPUT"
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+  - name: Ensure gh is available
+    run: |
+      if ! command -v gh >/dev/null 2>&1; then
+        echo "gh CLI not found. Installing..."
+        sudo apt-get update
+        sudo apt-get install -y gh
+      else
+        echo "gh CLI found: $(gh --version | head -n1)"
+      fi
 
-      - id: make_zip
-        name: Create zip of repository
-        run: |
-          set -euo pipefail
-          ZIP_NAME="repo-release-${{ github.run_id }}.zip"
-          # Exclude .git and workflow files so we don't leak CI metadata
-          zip -r "$ZIP_NAME" . -x ".git/*" ".github/workflows/*"
-          echo "zip_name=$ZIP_NAME" >> "$GITHUB_OUTPUT"
+  - name: Authenticate gh with GITHUB_TOKEN
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    run: |
+      # Log in gh using the provided token (read from stdin)
+      echo "${GITHUB_TOKEN}" | gh auth login --with-token
 
-      - id: create_release
-        name: Create GitHub Release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: "release-${{ github.run_id }}"
-          release_name: "Automated release ${{ github.run_id }} (branch: ${{ github.ref_name }})"
-          body: |
-            Automated release created by GitHub Actions.
-            Run ID: ${{ github.run_id }}
-            Commit: ${{ github.sha }}
-          draft: false
-          prerelease: false
-
-      - name: Upload zip to release
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ${{ steps.make_zip.outputs.zip_name }}
-          asset_name: "${{ github.repository }}-release-${{ github.run_id }}.zip"
-          asset_content_type: application/zip
+  - name: Create release and upload asset using gh
+    env:
+      GITHUB_REPOSITORY: ${{ github.repository }}
+      GITHUB_SHA: ${{ github.sha }}
+      GITHUB_RUN_ID: ${{ github.run_id }}
+      GITHUB_REF_NAME: ${{ github.ref_name }}
+    run: |
+      set -euo pipefail
+      TAG="release-${GITHUB_RUN_ID}"
+      TITLE="Automated release ${GITHUB_RUN_ID} (branch: ${GITHUB_REF_NAME})"
+      NOTES="Automated release created by GitHub Actions.
