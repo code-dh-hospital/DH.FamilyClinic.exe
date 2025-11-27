@@ -28,14 +28,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y gh
 
-      - name: Authenticate gh with GITHUB_TOKEN
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          # authenticate gh using token from stdin
-          echo "${GITHUB_TOKEN}" | gh auth login --with-token
-
-      - name: Create release and upload asset using gh
+      - name: Create release and upload asset using gh (uses GITHUB_TOKEN)
         env:
           ZIP_NAME: ${{ steps.make_zip.outputs.zip_name }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -43,7 +36,8 @@ jobs:
           set -euo pipefail
           TAG="release-${{ github.run_id }}"
           TITLE="Automated release ${{ github.run_id }} (branch: ${{ github.ref_name }})"
-          NOTES="Automated release created by GitHub Actions. Run ID: ${{ github.run_id }} Commit: ${{ github.sha }}"
+          NOTES="Automated release created by GitHub Actions.Run ID: ${{ github.run_id }}. Commit: ${{ github.sha }}"
+          # Create the release (or upload asset if release already exists)
           if gh release create "$TAG" "$ZIP_NAME" --title "$TITLE" --notes "$NOTES"; then
             echo "Release created and asset uploaded."
           else
