@@ -1,43 +1,50 @@
-steps:
-  - name: Checkout repository
-    uses: actions/checkout@v4
-    with:
-      fetch-depth: 0
+name: Create release on push (zip)
+on: push
+permissions:
+  contents: write
 
-  - id: make_zip
-    name: Create zip of repository
-    run: |
-      set -euo pipefail
-      ZIP_NAME="repo-release-${{ github.run_id }}.zip"
-      # Exclude .git and workflow files so we don't leak CI metadata
-      zip -r "$ZIP_NAME" . -x ".git/*" ".github/workflows/*"
-      echo "zip_name=$ZIP_NAME" >> "$GITHUB_OUTPUT"
+jobs:
+  create_release:
+    name: Create release (zip) on push
+    runs-on: ubuntu-latest
 
-  - name: Ensure gh is available
-    run: |
-      if ! command -v gh >/dev/null 2>&1; then
-        echo "gh CLI not found. Installing..."
-        sudo apt-get update
-        sudo apt-get install -y gh
-      else
-        echo "gh CLI found: $(gh --version | head -n1)"
-      fi
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-  - name: Authenticate gh with GITHUB_TOKEN
-    env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    run: |
-      # Log in gh using the provided token (read from stdin)
-      echo "${GITHUB_TOKEN}" | gh auth login --with-token
+      - id: make_zip
+        name: Create zip of repository
+        run: |
+          set -euo pipefail
+          ZIP_NAME="repo-release-${{ github.run_id }}.zip"
+          # Exclude .git and workflow files so we don't leak CI metadata
+          zip -r "$ZIP_NAME" . -x ".git/*" ".github/workflows/*"
+          echo "zip_name=$ZIP_NAME" >> "$GITHUB_OUTPUT"
 
-  - name: Create release and upload asset using gh
-    env:
-      GITHUB_REPOSITORY: ${{ github.repository }}
-      GITHUB_SHA: ${{ github.sha }}
-      GITHUB_RUN_ID: ${{ github.run_id }}
-      GITHUB_REF_NAME: ${{ github.ref_name }}
-    run: |
-      set -euo pipefail
-      TAG="release-${GITHUB_RUN_ID}"
-      TITLE="Automated release ${GITHUB_RUN_ID} (branch: ${GITHUB_REF_NAME})"
-      NOTES="Automated release created by GitHub Actions.
+      - name: Install GitHub CLI (gh)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gh
+
+      - name: Authenticate gh with GITHUB_TOKEN
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "${GITHUB_TOKEN}" | gh auth login --with-token
+
+      - name: Create release and upload asset using gh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="release-${{ github.run_id }}"
+          TITLE="Automated release ${{ github.run_id }} (branch: ${{ github.ref_name }})"
+          NOTES="Automated release created by GitHub Actions.
+Run ID: ${{ github.run_id }}
+Commit: ${{ github.sha }}"
+          # Create the release and upload the zip; if the release already exists, upload will clobber
+          if ! gh release create "${TAG}" "${{ steps.make_zip.outputs.zip_name }}" --title "${TITLE}" --notes "${NOTES}"; then
+            gh release upload "${TAG}" "${{ steps.make_zip.outputs.zip_name }}" --clobber
+          fi
